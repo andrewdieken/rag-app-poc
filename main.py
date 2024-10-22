@@ -2,9 +2,9 @@ import json
 import os
 
 from dotenv import load_dotenv
-from elasticsearch import Elasticsearch
 from openai import OpenAI
 
+from data_loader import load_data
 from utils import get_embedding_model, get_es_client
 
 load_dotenv()
@@ -78,8 +78,24 @@ def generate_openai_completion(user_prompt, question):
 
 
 if __name__ == "__main__":
-    question = input("Please enter your question: ")
-    elasticsearch_results = get_elasticsearch_results(question)
-    context_prompt = create_openai_prompt(elasticsearch_results)
-    openai_completion = generate_openai_completion(context_prompt, question)
-    print(openai_completion)
+    while True:
+        print("Please select an option:")
+        print("1. Ask a question")
+        print("2. Load data")
+        print("3. Exit")
+
+        option = input("Please enter your choice: ")
+
+        if option == "1":
+            question = input("Please enter your question: ")
+            elasticsearch_results = get_elasticsearch_results(question)
+            context_prompt = create_openai_prompt(elasticsearch_results)
+            openai_completion = generate_openai_completion(context_prompt, question)
+            print(openai_completion)
+        elif option == "2":
+            file_path = input("Please enter the path to the JSON file: ")
+            load_data(file_path)
+        elif option == "3":
+            break
+        else:
+            print("Invalid option")

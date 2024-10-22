@@ -1,35 +1,71 @@
-from csv import DictReader
+import argparse
+import json
+import os
 
-from utils import get_embedding_model
+from dotenv import load_dotenv
+
+from utils import get_embedding_model, get_es_client
+
+load_dotenv()
+
+es_client = get_es_client()
+
+index_name = "rag_poc"
+
+index_mappings = {
+    "properties": {
+        "context": {
+            "type": "text"
+        },
+        "context_embedding": {
+            "type": "dense_vector",
+            "dims": 384,
+            "index": True,
+            "similarity": "cosine"
+        }
+    }
+}
+
+
+def index_exists():
+    return es_client.indices.exists(index=index_name)
+
+
+def create_index():
+    if index_exists():
+        print(f"Index '{index_name}' already exists. If you'd like to recreate the index, delete the existing index first with the 'delete_index' flag.")
+        return
+
+    print(f"Creating index '{index_name}'...")
+    es_client.indices.create(index=index_name, mappings=index_mappings)
+    print(f"Index '{index_name}' created successfully.")
+
+
+def populate_index(documents):
+    print(f"Populating index '{index_name}'...")
+    for document in documents:
+        es_client.index(index=index_name, body=document)
+    print(f"Index '{index_name}' populated successfully.")
 
 
 def load_data(file_path):
+    if not index_exists():
+        create_index()
+
     embedding_model = get_embedding_model()
 
-    session_data = []
+    documents = []
     with open(file_path, "r") as f:
-        reader = DictReader(f)
-        for row in reader:
-            name = row['Session Title']
-            start_datetime = f'{row["Date"]} {row["Time Start"]}'
-            end_datetime = f'{row["End Date (Optional)"]} {row["Time End (Optional)"]}'
-            locations = row["Room/Location"]
+        data = json.load(f)
+        for row in data:
+            if not row.get("context"):
+                raise ValueError("'context' field is required")
 
-            vector_embedding_text = f"{name} starts at {start_datetime} "
-            if end_datetime == start_datetime:
-                vector_embedding_text += f"and goes all day. "
-            else:
-                vector_embedding_text += f"and ends at {end_datetime}."
-
-            vector_embedding_text += f"It's located at {locations}. "
-
-            vector_embedding_text += row["Description (Optional)"]
-
-            session_data.append({
-                "name": name,
-                "session_id": row["Session ID"],
+            vector_embedding_text = row["context"]
+            documents.append({
                 "context": vector_embedding_text,
                 "context_embedding": embedding_model.encode(vector_embedding_text).tolist()
             })
 
-        return session_data
+
+    populate_index(documents)
